@@ -1,0 +1,152 @@
+// lib/screens/stock_history_screen.dart
+import 'package:flutter/material.dart';
+import 'package:myapp/model/product_model.dart';
+import 'package:myapp/model/stock_transactions.dart';
+import 'package:myapp/services/stock_transaction_services.dart';
+import 'package:myapp/utils/formatter.dart';
+import 'package:provider/provider.dart';
+
+import '../services/product_service.dart';
+
+
+class StockHistoryScreen extends StatelessWidget {
+  const StockHistoryScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final productId = ModalRoute.of(context)!.settings.arguments as String;
+    final productService = Provider.of<ProductService>(context, listen: false);
+    final stockService = Provider.of<StockTransactionService>(context, listen: false);
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Stock History'),
+      ),
+      body: FutureBuilder<Product?>(
+        future: productService.getProduct(productId),
+        builder: (context, productSnapshot) {
+          if (productSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          final product = productSnapshot.data;
+          if (product == null) {
+            return const Center(child: Text('Product not found'));
+          }
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Product info header
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Current Stock: ${product.currentStock} ${product.unitOfMeasure}'),
+                  ],
+                ),
+              ),
+              
+              // Divider
+              const Divider(height: 1),
+              
+              // Transaction list
+              Expanded(
+                child: FutureBuilder<List<StockTransaction>>(
+                  future: stockService.getTransactionsForProduct(productId),
+                  builder: (context, txnSnapshot) {
+                    if (txnSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    
+                    final transactions = txnSnapshot.data ?? [];
+                    
+                    if (transactions.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.history, size: 64, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'No stock transactions yet',
+                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.pushNamed(
+                                context, 
+                                '/stock/adjust',
+                                arguments: productId,
+                              ),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Adjust Stock'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    
+                    return ListView.builder(
+                      itemCount: transactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = transactions[index];
+                        final isAddition = transaction.type == 'addition';
+                        
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isAddition ? Colors.green : Colors.red,
+                            child: Icon(
+                              isAddition ? Icons.add : Icons.remove,
+                              color: Colors.white,
+                            ),
+                          ),
+                          title: Text(
+                            '${isAddition ? '+' : '-'}${transaction.quantity} ${product.unitOfMeasure}',
+                            style: TextStyle(
+                              color: isAddition ? Colors.green : Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(transaction.reason),
+                              const SizedBox(height: 4),
+                              Text(
+                                formatDateTime(transaction.timestamp),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.pushNamed(
+          context, 
+          '/stock/adjust',
+          arguments: productId,
+        ),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
